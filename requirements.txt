@@ -1,0 +1,12 @@
+# Runtime deps for generating loops (parse -> contour -> synth[sine] -> post).
+# Superset owned by the foundation so no workstream edits this file.
+numpy>=1.24
+scipy>=1.10
+soundfile>=0.12        # WAV/FLAC read+write (PCM_16)
+pyloudnorm>=0.1.1      # -16 LUFS normalize (post.py); peak fallback if absent
+pytest>=7.0
+
+# The DDSP backend (synthesize.py backend="ddsp") loads a checkpoint trained
+# offline. Its heavy deps (tensorflow/ddsp or torch) are intentionally NOT
+# pinned here — the runtime ships the pre-rendered pack + the sine backend.
+# Training/inference deps live in training/requirements-train.txt.

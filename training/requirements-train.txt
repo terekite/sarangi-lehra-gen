@@ -1,0 +1,44 @@
+# =============================================================================
+# TRAINING / PREPROCESSING dependencies for sarangi-lehra-gen
+#
+#   Colab / dev-machine ONLY.  These are NEVER shipped in the app — the runtime
+#   is 100% client-side and plays pre-rendered loop files.  Do NOT add anything
+#   here to the repo-root requirements.txt (that file is runtime-only).
+#
+# Install:   pip install -r training/requirements-train.txt
+# =============================================================================
+
+# --- DDSP timbre-transfer model ---------------------------------------------
+# Magenta's DDSP repo (github.com/magenta/ddsp) was ARCHIVED in 2024. The pip
+# package still installs, but it pins older TensorFlow. If `pip install ddsp`
+# resolves cleanly on Colab, use it. Known-good combo (TF 2.11 era):
+#
+#   FALLBACK if dependency resolution fights you:
+#     pip install "ddsp==3.7.0"
+#     pip install "tensorflow==2.11.*"
+#   or install from a maintained community fork:
+#     pip install "git+https://github.com/magenta/ddsp.git@v3.7.0"
+#
+# On Colab, pin TF FIRST, then ddsp, to avoid the resolver upgrading TF.
+ddsp==3.7.0
+tensorflow==2.11.*
+
+# CREPE — pitch (f0) extraction used by ddsp_prepare_tfrecord.
+crepe==0.0.15
+
+# --- Preprocessing ----------------------------------------------------------
+# demucs — source separation to strip tabla from with_tabla/ files.
+demucs==4.0.1
+
+# yt-dlp — lossless YouTube audio sourcing (see training/DATA_SPEC.md).
+yt-dlp>=2024.1.1
+
+# Audio I/O, resampling, silence trimming.
+librosa==0.10.1
+soundfile==0.12.1
+numpy==1.23.5          # pinned for TF 2.11 / numba (librosa) compatibility
+scipy==1.10.1
+
+# Optional: better spectral noise reduction for preprocess.py --denoise.
+# (preprocess.py has a numpy fallback, so this is not strictly required.)
+noisereduce==3.0.0

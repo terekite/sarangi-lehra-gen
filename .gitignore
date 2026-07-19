@@ -1,0 +1,18 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+# Rendered loops (regenerated from the render matrix)
+out/
+
+# Training data + intermediates (sourced locally, not committed)
+training/data/
+*.tfrecord
+*.wav.tmp
+.DS_Store
+
+# IDE / boilerplate
+.idea/
+main.py
