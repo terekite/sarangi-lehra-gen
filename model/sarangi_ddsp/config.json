@@ -5,6 +5,8 @@
   "n_harmonic": 100,
   "n_bands": 65,
   "gru_layers": 1,
+  "rolloff_lo_hz": 5000.0,
+  "rolloff_hi_hz": 7000.0,
   "loudness_db_lo": -27.475170707702638,
   "loudness_db_hi": -8.555731058120736
 }
