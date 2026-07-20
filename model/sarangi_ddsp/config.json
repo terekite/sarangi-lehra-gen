@@ -1,0 +1,10 @@
+{
+  "sampling_rate": 16000,
+  "block_size": 160,
+  "hidden_size": 256,
+  "n_harmonic": 100,
+  "n_bands": 65,
+  "gru_layers": 1,
+  "loudness_db_lo": -27.475170707702638,
+  "loudness_db_hi": -8.555731058120736
+}
