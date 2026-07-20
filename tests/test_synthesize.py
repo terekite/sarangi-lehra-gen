@@ -97,15 +97,39 @@ def test_sine_deterministic():
 
 
 def test_ddsp_import_is_lazy_and_errors_clearly():
-    # Importing the synthesize module (done at top of file) must not require TF.
+    # Importing the synthesize module (done at top of file) must not pull the
+    # heavy, backend-only dep (torch) — the base package stays light.
     import sys
 
-    assert "tensorflow" not in sys.modules
+    assert "torch" not in sys.modules
 
-    backend = get_backend("ddsp")  # default checkpoint path, which does not exist
+    # With no checkpoint at the given path, the backend must fail loudly and
+    # actionably (before any torch import), not silently.
+    backend = get_backend("ddsp", checkpoint="model/__does_not_exist__/")
     with pytest.raises((FileNotFoundError, RuntimeError)) as exc:
         backend.synthesize(*_contour_for_ddsp())
     assert "sine" in str(exc.value).lower() or "checkpoint" in str(exc.value).lower()
+
+
+def test_ddsp_synthesizes_when_trained():
+    # Positive path: when torch + a trained checkpoint are present, the ddsp
+    # backend returns finite mono audio of the exact contract length, and is
+    # deterministic per seed (cache-key idempotency). Skipped in a torch-less
+    # env or before a model has been trained.
+    import os
+
+    pytest.importorskip("torch")
+    if not os.path.exists("model/sarangi_ddsp/ddsp_torch.pt"):
+        pytest.skip("no trained ddsp checkpoint")
+
+    contour, params = _contour_for_ddsp()
+    a = synthesize(contour, params, backend="ddsp")
+    b = synthesize(contour, params, backend="ddsp")
+    assert a.shape == (params.n_synth_overhang,)
+    assert a.dtype == np.float32
+    assert np.isfinite(a).all()
+    assert np.max(np.abs(a)) > 0.0          # not silence
+    assert np.array_equal(a, b)             # deterministic per seed
 
 
 def _contour_for_ddsp():
