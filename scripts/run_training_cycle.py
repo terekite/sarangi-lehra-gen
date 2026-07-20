@@ -72,7 +72,10 @@ def _checkpoint_present() -> bool:
     """A checkpoint 'exists' if the dir holds any TF checkpoint/saved-model files."""
     if not CHECKPOINT_DIR.is_dir():
         return False
-    markers = ("*.index", "checkpoint", "*.pb", "saved_model.pb", "operative_config*.gin")
+    # PyTorch DDSP export (current): config.json + ddsp_torch.pt.
+    # Legacy TF/magenta-DDSP markers kept for backward compatibility.
+    markers = ("ddsp_torch.pt", "config.json", "*.index", "checkpoint",
+               "*.pb", "saved_model.pb", "operative_config*.gin")
     return any(next(CHECKPOINT_DIR.rglob(m), None) for m in markers)
 
 

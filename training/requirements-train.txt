@@ -8,6 +8,31 @@
 # Install:   pip install -r training/requirements-train.txt
 # =============================================================================
 
+# -----------------------------------------------------------------------------
+# LOCAL PyTorch training path (PREFERRED — see training/RUN_CYCLE.md)
+# -----------------------------------------------------------------------------
+# The sarangi timbre model now trains LOCALLY with PyTorch (CPU/Metal) via
+# training/train_torch_ddsp.py — no TensorFlow, no GPU, no Colab required. This
+# sidesteps the archived-Magenta-DDSP + TF-2.11 dependency hell below (which is
+# unbuildable on Apple Silicon: no arm64/py3.11 wheel for tensorflow<=2.11).
+#
+# Minimal install for the local path (preprocess + train + render):
+#     pip install torch torchcrepe librosa demucs soundfile
+# (torchaudio must match your torch, e.g. `pip install torchaudio==<torch ver>`;
+#  demucs is only needed to strip tabla from training/data/raw/with_tabla/.)
+#
+# torch          # synthesis model + training loop (also the runtime ddsp backend)
+# torchcrepe     # f0 (pitch) extraction — replaces CREPE/TensorFlow
+# librosa        # audio I/O, resampling, loudness, silence trim
+# demucs         # source separation (with_tabla/ only)
+# soundfile      # WAV I/O
+
+# -----------------------------------------------------------------------------
+# LEGACY Magenta-DDSP / TensorFlow path (DEPRECATED — Colab x86+GPU only)
+# -----------------------------------------------------------------------------
+# Kept for reference; the local PyTorch path above supersedes it. Do NOT expect
+# these to install on Apple Silicon.
+
 # --- DDSP timbre-transfer model ---------------------------------------------
 # Magenta's DDSP repo (github.com/magenta/ddsp) was ARCHIVED in 2024. The pip
 # package still installs, but it pins older TensorFlow. If `pip install ddsp`

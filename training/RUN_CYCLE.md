@@ -44,9 +44,11 @@ This script:
 4. Copies every render to **`~/Desktop/sarangi-renders/`** with readable names and
    a `MANIFEST.txt`.
 
-So the local, deterministic work is fully automated. The **GPU training itself
-runs on Colab** (this machine has no GPU/TensorFlow) — that's the manual step in
-the middle, described next.
+So the local, deterministic work is fully automated. **Training now also runs
+locally** — a compact PyTorch DDSP model (CPU/Metal, no TensorFlow, no GPU, no
+Colab) via `training/train_torch_ddsp.py`. See step 2 below. (The legacy
+Magenta-DDSP/TensorFlow Colab notebook is kept for reference but is deprecated —
+its `tensorflow<=2.11` pin is unbuildable on Apple Silicon.)
 
 ---
 
@@ -63,19 +65,27 @@ demucs, tensorflow, ddsp, crepe; Colab/dev only, never shipped).
 Output: cleaned 16 kHz mono clips in `training/data/processed/`, and if
 `--tfrecord`, a TFRecord in `training/data/tfrecord/`.
 
-### 2. Train on Colab (manual, ~2–4 hr on free GPU)
-Open `training/train_ddsp.ipynb` in Google Colab (GPU runtime).
-- Upload/mount `training/data/processed/` (or the TFRecord).
-- Run the cells: it pins DDSP deps (note: Magenta's DDSP was archived in 2024 —
-  the notebook documents the version pin / fallback), trains the autoencoder,
-  and exports the checkpoint.
-- **Download the exported checkpoint and place it at
-  `/Users/omarali/PycharmProjects/sarangi-lehra-gen/model/sarangi_ddsp/`**
-  (the folder should contain the TF checkpoint files + `operative_config-*.gin`).
+### 2. Train locally with PyTorch (~1–1.5 hr on Metal, no GPU/Colab needed)
+```bash
+pip install torch torchcrepe librosa soundfile   # one-time (+ torchaudio, demucs for with_tabla)
+python training/train_torch_ddsp.py               # trains on training/data/processed/
+```
+This trains a compact PyTorch DDSP (harmonic + filtered-noise) sarangi timbre
+model on Metal (MPS) if available, else CPU. It:
+- extracts f0 (torchcrepe) + loudness once and **caches** them to
+  `training/data/ddsp_features/` (a resume never recomputes them);
+- **checkpoints every ~500 steps** to `model/sarangi_ddsp/` (`config.json` +
+  `ddsp_torch.pt`) and **auto-resumes** from the latest checkpoint — stop any
+  time (Ctrl-C, kill, close the machine) and rerun the same command to continue;
+- `--steps N` sets the target; `--fresh` ignores the checkpoint; `--device cpu`
+  forces CPU. Watch the multi-scale spectral loss and stop when it plateaus.
 
 The runtime `ddsp` backend (`sarangi_gen/backends/ddsp.py`) loads exactly this
-folder. Its inference flow is sketched there; if it raises "checkpoint not found"
-the export didn't land in that folder.
+folder (rebuilds the graph from `config.json`, restores `ddsp_torch.pt`). If it
+raises "checkpoint not found", training hasn't written that folder yet.
+
+> Legacy: `training/train_ddsp.ipynb` (Magenta-DDSP on Colab GPU) is deprecated
+> and kept only for reference — it does not build on Apple Silicon.
 
 ### 3. Render + verify (local, automated)
 ```bash
