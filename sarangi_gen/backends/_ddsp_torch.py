@@ -50,6 +50,12 @@ class DDSPConfig:
     n_harmonic: int = 100
     n_bands: int = 65                # filtered-noise frequency bands
     gru_layers: int = 1
+    # Harmonic bandlimit: amplitudes are held full below ``rolloff_lo_hz`` and
+    # cosine-tapered to zero by ``rolloff_hi_hz`` (well under Nyquist). This
+    # kills the near-Nyquist "whistle/feedback" artifact the additive synth
+    # otherwise produces at low f0 (where many harmonics fit under Nyquist).
+    rolloff_lo_hz: float = 5000.0
+    rolloff_hi_hz: float = 7000.0
     # Loudness feature is A-weighted dB min-max normalized to [0,1] over the
     # dataset using these percentiles; stored so training/inference agree.
     loudness_db_lo: float = -80.0
@@ -89,6 +95,23 @@ def remove_above_nyquist(amplitudes: torch.Tensor, pitch: torch.Tensor,
     freqs = pitch * k                                   # [B, T, n_harm]
     mask = (freqs < sampling_rate / 2).float() + 1e-7
     return amplitudes * mask
+
+
+def harmonic_rolloff(amplitudes: torch.Tensor, pitch: torch.Tensor,
+                     lo_hz: float, hi_hz: float) -> torch.Tensor:
+    """Cosine-taper harmonic amplitudes to zero between ``lo_hz`` and ``hi_hz``.
+
+    Weight is 1 for harmonics below ``lo_hz`` and 0 above ``hi_hz`` (a raised
+    cosine in between), bandlimiting the additive synth so it cannot emit a loud
+    near-Nyquist whistle. Applied in both training and inference so the model
+    learns its timbre within the band.
+    """
+    n_harm = amplitudes.shape[-1]
+    k = torch.arange(1, n_harm + 1, device=pitch.device)
+    freqs = pitch * k                                   # [B, T, n_harm]
+    frac = ((freqs - lo_hz) / max(hi_hz - lo_hz, 1e-6)).clamp(0.0, 1.0)
+    weight = 0.5 * (1.0 + torch.cos(math.pi * frac))    # 1 -> 0
+    return amplitudes * weight
 
 
 def harmonic_synth(pitch: torch.Tensor, amplitudes: torch.Tensor,
@@ -159,8 +182,13 @@ class DDSPSynth(nn.Module):
         self.proj_harm = nn.Linear(h, cfg.n_harmonic + 1)
         self.proj_noise = nn.Linear(h, cfg.n_bands)
 
-    def forward(self, pitch: torch.Tensor, loudness: torch.Tensor) -> torch.Tensor:
-        """pitch [B,T,1] in Hz, loudness [B,T,1] in [0,1]  ->  audio [B, T*block]."""
+    def forward(self, pitch: torch.Tensor, loudness: torch.Tensor,
+                return_components: bool = False) -> torch.Tensor:
+        """pitch [B,T,1] in Hz, loudness [B,T,1] in [0,1]  ->  audio [B, T*block].
+
+        With ``return_components=True`` returns ``(harmonic, noise)`` separately
+        (same shape) — used for diagnostics, not the render path.
+        """
         cfg = self.cfg
         hidden = torch.cat([self.in_pitch(pitch), self.in_loud(loudness)], -1)
         gru_out, _ = self.gru(hidden)
@@ -173,6 +201,8 @@ class DDSPSynth(nn.Module):
         distribution = distribution / distribution.sum(-1, keepdim=True)
         amplitudes = distribution * total_amp
         amplitudes = remove_above_nyquist(amplitudes, pitch, cfg.sampling_rate)
+        amplitudes = harmonic_rolloff(amplitudes, pitch,
+                                      cfg.rolloff_lo_hz, cfg.rolloff_hi_hz)
         amplitudes = upsample(amplitudes, cfg.block_size)
         pitch_up = upsample(pitch, cfg.block_size)
         harmonic = harmonic_synth(pitch_up, amplitudes, cfg.sampling_rate)  # [B,N,1]
@@ -184,6 +214,8 @@ class DDSPSynth(nn.Module):
                             device=ir.device) * 2.0 - 1.0)
         noise = fft_convolve(white, ir).reshape(ir.shape[0], -1, 1)     # [B,N,1]
 
+        if return_components:
+            return harmonic.squeeze(-1), noise.squeeze(-1)
         signal = harmonic + noise
         return signal.squeeze(-1)                                       # [B, N]
 
