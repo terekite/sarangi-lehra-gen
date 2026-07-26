@@ -205,6 +205,23 @@ def try_resume(model, opt, cfg, rng):
     if not os.path.exists(path):
         return 0, None
     state = torch.load(path, map_location="cpu")
+    # Resume-size guard: a checkpoint only loads into an identically-shaped
+    # graph. If the architecture knobs differ from this run's config, bail with
+    # a clear message instead of a cryptic state_dict shape error.
+    ck = state["config"]
+    arch = ("hidden_size", "n_harmonic", "n_bands", "gru_layers",
+            "block_size", "sampling_rate")
+    mismatch = {k: (ck.get(k), getattr(cfg, k))
+                for k in arch if ck.get(k) != getattr(cfg, k)}
+    if mismatch:
+        detail = ", ".join(f"{k}: ckpt={a} vs requested={b}"
+                           for k, (a, b) in mismatch.items())
+        sys.exit(
+            f"[resume] checkpoint architecture differs from requested config "
+            f"({detail}).\n"
+            f"         A bigger/smaller model cannot resume from this "
+            f"checkpoint — pass --fresh to train it from scratch (the old "
+            f"checkpoint stays on disk / is backed up by its git tag).")
     model.load_state_dict(state["model"])
     opt.load_state_dict(state["optimizer"])
     torch.set_rng_state(state["torch_rng"])
@@ -240,10 +257,20 @@ def main(argv=None) -> int:
     p.add_argument("--device", default="auto", choices=["auto", "cpu", "mps"])
     p.add_argument("--processed-dir", default=DEFAULT_PROCESSED)
     p.add_argument("--fresh", action="store_true", help="Ignore any checkpoint.")
+    # Model-size knobs (defaults match DDSPConfig — the shipped 80k model).
+    # A bigger model (e.g. --hidden-size 512 --gru-layers 2) needs --fresh;
+    # the resume guard refuses to load a differently-shaped checkpoint.
+    p.add_argument("--hidden-size", type=int, default=DDSPConfig.hidden_size,
+                   help="GRU/MLP hidden width (bigger = more capacity).")
+    p.add_argument("--gru-layers", type=int, default=DDSPConfig.gru_layers,
+                   help="Number of stacked GRU layers.")
+    p.add_argument("--n-harmonic", type=int, default=DDSPConfig.n_harmonic,
+                   help="Additive-synth harmonic count.")
     args = p.parse_args(argv)
 
     device = pick_device(args.device)
-    cfg = DDSPConfig()
+    cfg = DDSPConfig(hidden_size=args.hidden_size, gru_layers=args.gru_layers,
+                     n_harmonic=args.n_harmonic)
     win_frames = int(round(args.window_s * cfg.sampling_rate / cfg.block_size))
     print(f"== torch-ddsp training | device={device} | window={win_frames} frames "
           f"| batch={args.batch} | target={args.steps} steps ==")
